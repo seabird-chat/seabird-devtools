@@ -33,7 +33,7 @@
               pname = "seabird-devtools";
               version = "0.1.0-dev";
               src = ./.;
-              vendorHash = "sha256-9HB3CJKeRGDelDNtrH86q0zberIM1/yivDEN4ZfNXLs=";
+              vendorHash = "sha256-G//OSNtOVNNwqLt4yCgLQ4G3C2Msvs+M1SkNqyythuE=";
               subPackages = [ "cmd/seabird-dev" ];
 
               ldflags = [

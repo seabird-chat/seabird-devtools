@@ -1,0 +1,67 @@
+package format
+
+import (
+	"testing"
+
+	"github.com/alecthomas/assert/v2"
+	"github.com/seabird-chat/seabird-go/pb"
+)
+
+func TestEvent(t *testing.T) {
+	source := &pb.ChannelSource{
+		ChannelId: "sbc_chan",
+		User:      &pb.User{Id: "sbu_alice", DisplayName: "alice"},
+	}
+	alice := source.GetUser()
+
+	tests := []struct {
+		name  string
+		event *pb.Event
+		want  string
+	}{
+		{
+			name:  "message",
+			event: &pb.Event{Inner: &pb.Event_Message{Message: &pb.MessageEvent{Source: source, Text: "hi"}}},
+			want:  "message sbc_chan alice(sbu_alice): hi",
+		},
+		{
+			name:  "private message",
+			event: &pb.Event{Inner: &pb.Event_PrivateMessage{PrivateMessage: &pb.PrivateMessageEvent{Source: alice, Text: "hi"}}},
+			want:  "private_message alice(sbu_alice): hi",
+		},
+		{
+			name:  "command",
+			event: &pb.Event{Inner: &pb.Event_Command{Command: &pb.CommandEvent{Source: source, Command: "weather", Arg: "98101"}}},
+			want:  "command sbc_chan alice(sbu_alice): weather 98101",
+		},
+		{
+			name:  "command without arg",
+			event: &pb.Event{Inner: &pb.Event_Command{Command: &pb.CommandEvent{Source: source, Command: "ping"}}},
+			want:  "command sbc_chan alice(sbu_alice): ping",
+		},
+		{
+			name: "send message with tags",
+			event: &pb.Event{
+				Inner: &pb.Event_SendMessage{SendMessage: &pb.SendMessageEvent{Sender: "url-plugin", ChannelId: "sbc_chan", Text: "title"}},
+				Tags:  map[string]string{"proxy/skip": "1", "a": "b"},
+			},
+			want: "send_message sbc_chan from url-plugin: title [a=b proxy/skip=1]",
+		},
+		{
+			name:  "perform private action",
+			event: &pb.Event{Inner: &pb.Event_PerformPrivateAction{PerformPrivateAction: &pb.PerformPrivateActionEvent{Sender: "p", UserId: "sbu_alice", Text: "waves"}}},
+			want:  "perform_private_action sbu_alice from p: waves",
+		},
+		{
+			name:  "unknown",
+			event: &pb.Event{},
+			want:  "unknown event {}",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, Event(tt.event))
+		})
+	}
+}
