@@ -6,13 +6,12 @@ package integration
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -22,31 +21,13 @@ import (
 
 	"github.com/seabird-chat/seabird-devtools/internal/backend"
 	"github.com/seabird-chat/seabird-devtools/internal/plugin"
+	"github.com/seabird-chat/seabird-devtools/internal/testutil"
 )
 
 // testTimeout bounds each test, including starting core.
 const testTimeout = 30 * time.Second
 
 var tokenPattern = regexp.MustCompile(`sbt_\S+`)
-
-// lockedBuffer is a bytes.Buffer which is safe to write from several
-// goroutines.
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *lockedBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
 
 func coreBinary(t *testing.T) string {
 	t.Helper()
@@ -62,8 +43,8 @@ func coreBinary(t *testing.T) string {
 }
 
 // startCore runs seabird-core with a fresh database until the test ends, and
-// returns its URL and an auth token.
-func startCore(t *testing.T, ctx context.Context) (url, token string) {
+// returns its URL, an auth token, and its log output.
+func startCore(t *testing.T, ctx context.Context) (url, token string, logs *testutil.Buffer) {
 	t.Helper()
 
 	bin := coreBinary(t)
@@ -80,9 +61,9 @@ func startCore(t *testing.T, ctx context.Context) (url, token string) {
 	addr := lis.Addr().String()
 	lis.Close()
 
-	var logs lockedBuffer
+	logs = &testutil.Buffer{}
 	cmd := exec.CommandContext(ctx, bin, "serve", "--bind-host", addr, "--database-url", db)
-	cmd.Stdout, cmd.Stderr = &logs, &logs
+	cmd.Stdout, cmd.Stderr = logs, logs
 	assert.NoError(t, cmd.Start())
 	t.Cleanup(func() {
 		_ = cmd.Process.Kill()
@@ -92,39 +73,34 @@ func startCore(t *testing.T, ctx context.Context) (url, token string) {
 		}
 	})
 
-	eventually(t, 5*time.Second, "core to listen on "+addr, func() bool {
-		conn, err := net.DialTimeout("tcp", addr, 100*time.Millisecond)
-		if err != nil {
-			return false
-		}
-		conn.Close()
-		return true
-	})
+	// Core logs this once it's listening.
+	logs.WaitFor(t, "starting gRPC server")
 
-	return "http://" + addr, token
-}
-
-// eventually polls cond until it's true, failing the test after timeout.
-func eventually(t *testing.T, timeout time.Duration, what string, cond func() bool) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for !cond() {
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out after %s waiting for %s", timeout, what)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	return "http://" + addr, token, logs
 }
 
 type harness struct {
-	ctx context.Context
+	ctx   context.Context
+	syncs int
 
 	backend    *backend.Backend
-	backendOut *lockedBuffer
+	backendOut *testutil.Buffer
 
 	plugin    *plugin.Plugin
-	pluginOut *lockedBuffer
+	pluginOut *testutil.Buffer
+}
+
+// sync waits until core has handled every event the backend has sent. Core
+// handles a backend's events in order, so once the plugin sees a message sent
+// after them, they are done. Core also registers a plugin's commands before
+// delivering it events, so the plugin's commands are registered too.
+func (h *harness) sync(t *testing.T) {
+	t.Helper()
+
+	h.syncs++
+	marker := fmt.Sprintf("sync %d", h.syncs)
+	h.backendCmd(t, "pm sync "+marker)
+	h.pluginOut.WaitFor(t, marker+"\n")
 }
 
 // backendCmd runs a backend prompt command.
@@ -150,8 +126,8 @@ func newHarness(t *testing.T) *harness {
 	ctx, cancel := context.WithTimeout(t.Context(), testTimeout)
 	t.Cleanup(cancel)
 
-	url, token := startCore(t, ctx)
-	h := &harness{ctx: ctx, backendOut: &lockedBuffer{}, pluginOut: &lockedBuffer{}}
+	url, token, coreLogs := startCore(t, ctx)
+	h := &harness{ctx: ctx, backendOut: &testutil.Buffer{}, pluginOut: &testutil.Buffer{}}
 
 	ingest, err := seabird.NewChatIngestClient(url, token)
 	assert.NoError(t, err)
@@ -181,15 +157,12 @@ func newHarness(t *testing.T) *harness {
 		assert.NoError(t, <-backendDone)
 	})
 
+	// Core logs this once the plugin is subscribed, so no events are missed
+	// after it. Each test's core has only this plugin.
+	coreLogs.WaitFor(t, "plugin connected")
+
 	h.backendCmd(t, "join #general")
-	eventually(t, 5*time.Second, "core to see #general", func() bool {
-		out, err := h.pluginCmd(t, "channels dev://it")
-		return err == nil && strings.Contains(out, "dev://it/%23general")
-	})
-	eventually(t, 5*time.Second, "the ping command to register", func() bool {
-		out, err := h.pluginCmd(t, "commands")
-		return err == nil && strings.Contains(out, "ping")
-	})
+	h.sync(t)
 
 	return h
 }
@@ -202,11 +175,8 @@ func TestBackendEventsReachPlugin(t *testing.T) {
 	h.backendCmd(t, "msg #general alice **hi** there")
 	h.backendCmd(t, "cmd #general alice ping now")
 
-	eventually(t, 5*time.Second, "events in plugin output", func() bool {
-		out := h.pluginOut.String()
-		return strings.Contains(out, "message dev://it/%23general alice(dev://it/alice): hi there\n") &&
-			strings.Contains(out, "command dev://it/%23general alice(dev://it/alice): ping now\n")
-	})
+	h.pluginOut.WaitFor(t, "message dev://it/%23general alice(dev://it/alice): hi there\n")
+	h.pluginOut.WaitFor(t, "command dev://it/%23general alice(dev://it/alice): ping now\n")
 }
 
 func TestPluginRequestsReachBackend(t *testing.T) {
@@ -261,8 +231,9 @@ func TestLeaveRemovesChannel(t *testing.T) {
 	h := newHarness(t)
 
 	h.backendCmd(t, "leave #general")
-	eventually(t, 5*time.Second, "core to forget #general", func() bool {
-		out, err := h.pluginCmd(t, "channels dev://it")
-		return err == nil && out == "none\n"
-	})
+	h.sync(t)
+
+	out, err := h.pluginCmd(t, "channels dev://it")
+	assert.NoError(t, err)
+	assert.Equal(t, "none\n", out)
 }

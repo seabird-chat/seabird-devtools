@@ -8,6 +8,7 @@ import (
 	"net"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/alecthomas/assert/v2"
@@ -17,6 +18,8 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/seabird-chat/seabird-devtools/internal/testutil"
 )
 
 // fakeCore forwards events from the backend to events, and requests to the
@@ -68,24 +71,6 @@ func (f *fakeCore) next(t *testing.T) *pb.ChatEvent {
 	}
 }
 
-// lockedBuffer is a bytes.Buffer which is safe to write from Run.
-type lockedBuffer struct {
-	mu  sync.Mutex
-	buf bytes.Buffer
-}
-
-func (b *lockedBuffer) Write(p []byte) (int, error) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.Write(p)
-}
-
-func (b *lockedBuffer) String() string {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.buf.String()
-}
-
 func newFakeCore() *fakeCore {
 	return &fakeCore{events: make(chan *pb.ChatEvent, 10), requests: make(chan *pb.ChatRequest)}
 }
@@ -112,7 +97,7 @@ func dial(t *testing.T, core *fakeCore) pb.ChatIngestClient {
 
 // newTestBackend connects a backend to a fake core and runs it until the
 // test ends. The hello event is consumed.
-func newTestBackend(t *testing.T) (*Backend, *fakeCore, *lockedBuffer) {
+func newTestBackend(t *testing.T) (*Backend, *fakeCore, *testutil.Buffer) {
 	t.Helper()
 
 	core := newFakeCore()
@@ -125,7 +110,7 @@ func newTestBackend(t *testing.T) (*Backend, *fakeCore, *lockedBuffer) {
 		BackendInfo: &pb.Backend{Type: "dev", Id: "local"},
 	}}}, hello), "got %v", hello)
 
-	var out lockedBuffer
+	var out testutil.Buffer
 	done := make(chan error, 1)
 	go func() { done <- b.Run(ctx, &out) }()
 	t.Cleanup(func() {
@@ -246,42 +231,113 @@ func TestRequestOutput(t *testing.T) {
 	assert.Equal(t, "send_message #general: hi\n", out.String())
 }
 
+// fakeStream is an in-memory event stream, for tests which run in a synctest
+// bubble and so can't use the network.
+type fakeStream struct {
+	grpc.ClientStream
+
+	requests chan *pb.ChatRequest
+	events   chan *pb.ChatEvent
+	closed   chan struct{}
+}
+
+func (s *fakeStream) Send(event *pb.ChatEvent) error {
+	s.events <- event
+	return nil
+}
+
+func (s *fakeStream) Recv() (*pb.ChatRequest, error) {
+	select {
+	case req := <-s.requests:
+		return req, nil
+	case <-s.closed:
+		return nil, context.Canceled
+	}
+}
+
+// inBubble runs f with a backend reading from a fake stream, inside a synctest
+// bubble. There, synctest.Wait returns once every goroutine is idle, and the
+// clock only moves when f sleeps, so tests don't depend on real timing. Calling
+// stop cancels Run and waits for it to return; it's also called after f.
+func inBubble(t *testing.T, f func(t *testing.T, b *Backend, s *fakeStream, stop func())) {
+	synctest.Test(t, func(t *testing.T) {
+		s := &fakeStream{
+			requests: make(chan *pb.ChatRequest),
+			events:   make(chan *pb.ChatEvent, 10),
+			closed:   make(chan struct{}),
+		}
+		b := &Backend{stream: s, cancel: sync.OnceFunc(func() { close(s.closed) })}
+
+		ctx, cancel := context.WithCancel(t.Context())
+		done := make(chan error, 1)
+		go func() { done <- b.Run(ctx, io.Discard) }()
+
+		stop := sync.OnceFunc(func() {
+			cancel()
+			assert.NoError(t, <-done)
+		})
+		f(t, b, s, stop)
+		stop()
+	})
+}
+
 func TestModes(t *testing.T) {
 	t.Parallel()
 
 	req := &pb.ChatRequest{Id: "1", Inner: &pb.ChatRequest_SendMessage{SendMessage: &pb.SendMessageChatRequest{ChannelId: "#general", Text: "hi"}}}
+	success := &pb.ChatEvent{Id: "1", Inner: &pb.ChatEvent_Success{Success: &pb.SuccessChatEvent{}}}
 
 	t.Run("fail", func(t *testing.T) {
 		t.Parallel()
 
-		b, core, _ := newTestBackend(t)
-		assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond fail rate limited"))
-		core.requests <- req
-		assertEvent(t, &pb.ChatEvent{Id: "1", Inner: &pb.ChatEvent_Failed{Failed: &pb.FailedChatEvent{Reason: "rate limited"}}}, core.next(t))
+		inBubble(t, func(t *testing.T, b *Backend, s *fakeStream, _ func()) {
+			assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond fail rate limited"))
+			s.requests <- req
+			assertEvent(t, &pb.ChatEvent{Id: "1", Inner: &pb.ChatEvent_Failed{Failed: &pb.FailedChatEvent{Reason: "rate limited"}}}, <-s.events)
+		})
 	})
 
 	t.Run("ignore", func(t *testing.T) {
 		t.Parallel()
 
-		b, core, _ := newTestBackend(t)
-		b.SetMode(ModeIgnore, "", 0)
-		core.requests <- req
-		select {
-		case event := <-core.events:
-			t.Fatalf("unexpected reply %v", event)
-		case <-time.After(100 * time.Millisecond):
-		}
+		inBubble(t, func(t *testing.T, b *Backend, s *fakeStream, _ func()) {
+			assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond ignore"))
+			s.requests <- req
+			synctest.Wait()
+			assert.Equal(t, 0, len(s.events))
+		})
 	})
 
 	t.Run("delay", func(t *testing.T) {
 		t.Parallel()
 
-		b, core, _ := newTestBackend(t)
-		assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond delay 200ms"))
-		start := time.Now()
-		core.requests <- req
-		assertEvent(t, &pb.ChatEvent{Id: "1", Inner: &pb.ChatEvent_Success{Success: &pb.SuccessChatEvent{}}}, core.next(t))
-		assert.True(t, time.Since(start) >= 200*time.Millisecond)
+		inBubble(t, func(t *testing.T, b *Backend, s *fakeStream, _ func()) {
+			assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond delay 1h"))
+			s.requests <- req
+
+			time.Sleep(time.Hour - time.Second)
+			synctest.Wait()
+			assert.Equal(t, 0, len(s.events), "replied before the delay")
+
+			time.Sleep(time.Second)
+			synctest.Wait()
+			assert.Equal(t, 1, len(s.events), "no reply after the delay")
+			assertEvent(t, success, <-s.events)
+		})
+	})
+
+	t.Run("delay canceled", func(t *testing.T) {
+		t.Parallel()
+
+		inBubble(t, func(t *testing.T, b *Backend, s *fakeStream, stop func()) {
+			assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond delay 1h"))
+			s.requests <- req
+			synctest.Wait()
+
+			// Stopping while the reply is pending drops it.
+			stop()
+			assert.Equal(t, 0, len(s.events))
+		})
 	})
 }
 
