@@ -68,5 +68,15 @@ func TestDispatch(t *testing.T) {
 	assert.EqualError(t, err, `unknown command "nope", try help`)
 
 	assert.NoError(t, commands.Dispatch(ctx, &buf, "help"))
-	assert.Equal(t, "send <channel> <text...>  send a message\nhelp                      list commands\n", buf.String())
+	assert.Equal(t, ""+
+		"send <channel> <text...>  send a message\n"+
+		"sleep <duration>          wait, such as for replies when piping commands in\n"+
+		"help                      list commands\n", buf.String())
+
+	assert.NoError(t, commands.Dispatch(ctx, &buf, "sleep 1ms"))
+	assert.Error(t, commands.Dispatch(ctx, &buf, "sleep soon"))
+
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	assert.IsError(t, commands.Dispatch(canceled, &buf, "sleep 1h"), context.Canceled)
 }

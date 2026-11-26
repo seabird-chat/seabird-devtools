@@ -13,6 +13,7 @@ import (
 	"golang.org/x/term"
 
 	"github.com/seabird-chat/seabird-devtools/internal/plugin"
+	"github.com/seabird-chat/seabird-devtools/internal/repl"
 )
 
 func newPluginCommand(rootFlags *ff.FlagSet, rootConfig *rootConfig) *ff.Command {
@@ -56,7 +57,8 @@ commands.`),
 
 			switch {
 			case len(args) == 0:
-				return runShell(ctx, "plugin> ", historyFile("plugin"), p.Commands(),
+				shell := repl.ShellConfig{Prompt: "plugin> ", HistoryFile: historyFile("plugin")}
+				return runShell(ctx, shell, p.Commands(),
 					func(ctx context.Context, w io.Writer) error { return p.Watch(ctx, w, metadata) },
 					nil)
 			case len(args) == 1 && args[0] == "watch":

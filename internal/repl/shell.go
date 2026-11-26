@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 
 	"github.com/ergochat/readline"
+	"golang.org/x/term"
 )
 
 // Shell is an interactive prompt for a set of commands. Output written to
@@ -17,18 +19,40 @@ type Shell struct {
 	commands Commands
 }
 
-// NewShell creates a prompt for commands. History is saved to historyFile
-// unless it is empty.
-func NewShell(prompt, historyFile string, commands Commands) (*Shell, error) {
+// ShellConfig configures a Shell.
+type ShellConfig struct {
+	Prompt string
+
+	// HistoryFile is where history is saved, or empty to disable it.
+	HistoryFile string
+
+	// Stdin and Stdout default to the process's. Setting either one disables
+	// line editing, as it needs a real terminal.
+	Stdin  io.Reader
+	Stdout io.Writer
+}
+
+// NewShell creates a prompt for commands. Line editing is used only when
+// stdin and stdout are a terminal and TERM isn't "dumb". Line editing asks the
+// terminal for the cursor position and waits for the answer, which a dumb
+// terminal never sends.
+func NewShell(cfg ShellConfig, commands Commands) (*Shell, error) {
 	items := make([]*readline.PrefixCompleter, 0, len(commands))
 	for _, name := range commands.Names() {
 		items = append(items, readline.PcItem(name))
 	}
 
+	custom := cfg.Stdin != nil || cfg.Stdout != nil
 	rl, err := readline.NewFromConfig(&readline.Config{
-		Prompt:       prompt,
-		HistoryFile:  historyFile,
+		Prompt:       cfg.Prompt,
+		HistoryFile:  cfg.HistoryFile,
 		AutoComplete: readline.NewPrefixCompleter(items...),
+		Stdin:        cfg.Stdin,
+		Stdout:       cfg.Stdout,
+		FuncIsTerminal: func() bool {
+			return !custom && os.Getenv("TERM") != "dumb" &&
+				term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd()))
+		},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("start prompt: %w", err)
@@ -75,7 +99,11 @@ func (s *Shell) Run(ctx context.Context) error {
 			return nil
 		}
 
-		if err := s.commands.Dispatch(ctx, w, line); err != nil {
+		err = s.commands.Dispatch(ctx, w, line)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if err != nil {
 			fmt.Fprintf(w, "error: %v\n", err)
 		}
 	}

@@ -9,6 +9,7 @@ import (
 	seabird "github.com/seabird-chat/seabird-go"
 
 	"github.com/seabird-chat/seabird-devtools/internal/backend"
+	"github.com/seabird-chat/seabird-devtools/internal/repl"
 )
 
 func newBackendCommand(rootFlags *ff.FlagSet, rootConfig *rootConfig) *ff.Command {
@@ -55,7 +56,8 @@ answers core's requests. Run "help" at the prompt to list commands.`),
 				}
 			}
 
-			return runShell(ctx, "backend> ", historyFile("backend"), b.Commands(), b.Run, b.CloseSend)
+			shell := repl.ShellConfig{Prompt: "backend> ", HistoryFile: historyFile("backend")}
+			return runShell(ctx, shell, b.Commands(), b.Run, b.CloseSend)
 		},
 	}
 }

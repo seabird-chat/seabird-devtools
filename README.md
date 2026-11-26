@@ -91,14 +91,23 @@ changes that, to test how plugins and core handle a misbehaving backend:
 - `respond ok` goes back to normal.
 
 Piping commands into `seabird-dev backend` runs them in order, then disconnects
-once core has received everything.
+once core has received everything. Use `sleep` to wait for replies before the
+input ends:
+
+```sh
+printf 'join #general\ncmd #general alice ping\nsleep 2s\n' | seabird-dev backend
+```
 
 ## Prompts
 
-`help` lists the commands at either prompt. Arguments are split on whitespace,
-except the last argument of commands like `send` and `msg`, which takes the
-rest of the line. History is saved in the user cache directory, under
-`seabird-dev/`.
+`help` lists the commands at either prompt, and `sleep <duration>` waits.
+Arguments are split on whitespace, except the last argument of commands like
+`send` and `msg`, which takes the rest of the line. History is saved in the
+user cache directory, under `seabird-dev/`.
+
+Line editing is used only when stdin and stdout are a terminal and `TERM` isn't
+`dumb`. Otherwise commands are read one line at a time, which suits pipes and
+terminals that don't answer cursor position queries.
 
 ### Formatting
 

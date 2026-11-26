@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
+	"time"
 	"unicode"
 )
 
@@ -37,15 +38,18 @@ func (c Command) Usage() string {
 type Commands []Command
 
 // Dispatch parses line and runs the command it names. An empty line is
-// ignored, and "help" prints the command list.
+// ignored. "help" prints the command list and "sleep <duration>" waits.
 func (c Commands) Dispatch(ctx context.Context, w io.Writer, line string) error {
 	name, rest := cutField(line)
 	if name == "" {
 		return nil
 	}
 
-	if name == "help" {
+	switch name {
+	case "help":
 		return c.Help(w)
+	case "sleep":
+		return sleep(ctx, rest)
 	}
 
 	cmd, ok := c.find(name)
@@ -67,17 +71,18 @@ func (c Commands) Help(w io.Writer) error {
 	for _, cmd := range c {
 		fmt.Fprintf(tw, "%s\t%s\n", cmd.Usage(), cmd.Help)
 	}
+	fmt.Fprintf(tw, "sleep <duration>\twait, such as for replies when piping commands in\n")
 	fmt.Fprintf(tw, "help\tlist commands\n")
 	return tw.Flush()
 }
 
-// Names returns the name of every command, including help.
+// Names returns the name of every command, including the built-in ones.
 func (c Commands) Names() []string {
 	names := make([]string, 0, len(c)+1)
 	for _, cmd := range c {
 		names = append(names, cmd.Name)
 	}
-	return append(names, "help")
+	return append(names, "sleep", "help")
 }
 
 func (c Commands) find(name string) (Command, bool) {
@@ -126,4 +131,22 @@ func cutField(s string) (field, rest string) {
 		return s, ""
 	}
 	return s[:i], s[i:]
+}
+
+// sleep waits for the duration in arg, or until ctx is done.
+func sleep(ctx context.Context, arg string) error {
+	d, err := time.ParseDuration(strings.TrimSpace(arg))
+	if err != nil {
+		return fmt.Errorf("sleep: %w (usage: sleep <duration>)", err)
+	}
+
+	t := time.NewTimer(d)
+	defer t.Stop()
+
+	select {
+	case <-t.C:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

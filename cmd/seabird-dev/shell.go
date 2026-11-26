@@ -17,7 +17,7 @@ const drainTimeout = 2 * time.Second
 // run to finish cleanly before it is canceled.
 func runShell(
 	ctx context.Context,
-	prompt, historyFile string,
+	cfg repl.ShellConfig,
 	commands repl.Commands,
 	run func(ctx context.Context, w io.Writer) error,
 	drain func() error,
@@ -25,7 +25,7 @@ func runShell(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	shell, err := repl.NewShell(prompt, historyFile, commands)
+	shell, err := repl.NewShell(cfg, commands)
 	if err != nil {
 		return err
 	}
