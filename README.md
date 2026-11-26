@@ -66,3 +66,27 @@ Core only delivers command events to plugins which register the command. Pass
 `--command NAME` or `--command NAME:SHORT_HELP` once per command.
 
 Prompt history is saved in the user cache directory, under `seabird-dev/`.
+
+### Formatting
+
+`send`, `pm`, `action` and `paction` parse their text as Discord-flavored
+markdown and send it as message blocks. Pass `--plain` to send text as-is.
+
+| Markdown                         | Block                   |
+| -------------------------------- | ----------------------- |
+| `*italics*` or `_italics_`       | italics                 |
+| `**bold**`                       | bold                    |
+| `__underline__`                  | underline               |
+| `~~strikethrough~~`              | strikethrough           |
+| `\|\|spoiler\|\|`                | spoiler                 |
+| `` `code` ``                     | inline code             |
+| ```` ```lang\ncode\n``` ````     | fenced code             |
+| `[text](url)`, `<url>`, bare URL | link                    |
+| `# heading`                      | heading                 |
+| `> quote`                        | blockquote              |
+| `- item`                         | list                    |
+| `<t:1700000000>`                 | timestamp (unix second) |
+
+A prompt line can't contain a newline, so a literal `\n` is treated as one,
+for example `send irc://libera/%23chan - one\n- two`. Markdown without a
+matching block, such as images, is rejected.

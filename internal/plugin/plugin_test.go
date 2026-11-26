@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
+	seabird "github.com/seabird-chat/seabird-go"
 	"github.com/seabird-chat/seabird-go/pb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -78,6 +79,7 @@ func newTestPlugin(t *testing.T, core *fakeCore) *Plugin {
 func TestCommands(t *testing.T) {
 	tests := []struct {
 		name     string
+		plain    bool
 		line     string
 		wantReq  proto.Message
 		wantText string
@@ -85,7 +87,24 @@ func TestCommands(t *testing.T) {
 		{
 			name:     "send",
 			line:     "send sbc_a hello  world",
-			wantReq:  &pb.SendMessageRequest{ChannelId: "sbc_a", Text: "hello  world", RootBlock: &pb.Block{Plain: "hello  world", Inner: &pb.Block_Text{Text: &pb.TextBlock{Text: "hello  world"}}}},
+			wantReq:  &pb.SendMessageRequest{ChannelId: "sbc_a", RootBlock: seabird.NewTextBlock("hello  world")},
+			wantText: "ok\n",
+		},
+		{
+			name: "send markdown",
+			line: `send sbc_a **hi**\n- one`,
+			wantReq: &pb.SendMessageRequest{ChannelId: "sbc_a", RootBlock: seabird.NewContainerBlock(
+				seabird.NewBoldBlock(seabird.NewTextBlock("hi")),
+				seabird.NewTextBlock("\n"),
+				seabird.NewListBlock(seabird.NewTextBlock("one")),
+			)},
+			wantText: "ok\n",
+		},
+		{
+			name:     "send plain",
+			plain:    true,
+			line:     `send sbc_a **hi**\nthere`,
+			wantReq:  &pb.SendMessageRequest{ChannelId: "sbc_a", RootBlock: seabird.NewTextBlock("**hi**\nthere")},
 			wantText: "ok\n",
 		},
 		{
@@ -111,6 +130,7 @@ func TestCommands(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			core := &fakeCore{}
 			p := newTestPlugin(t, core)
+			p.Plain = tt.plain
 
 			var buf bytes.Buffer
 			assert.NoError(t, p.Commands().Dispatch(t.Context(), &buf, tt.line))

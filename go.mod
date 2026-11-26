@@ -8,6 +8,7 @@ require (
 	github.com/ergochat/readline v0.1.3
 	github.com/peterbourgon/ff/v4 v4.0.0-beta.1
 	github.com/seabird-chat/seabird-go v0.6.1
+	github.com/yuin/goldmark v1.8.7
 	google.golang.org/grpc v1.85.0
 	google.golang.org/protobuf v1.36.12
 )

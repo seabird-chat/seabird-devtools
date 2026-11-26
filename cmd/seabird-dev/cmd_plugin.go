@@ -16,10 +16,14 @@ import (
 )
 
 func newPluginCommand(rootFlags *ff.FlagSet, rootConfig *rootConfig) *ff.Command {
-	var commands []string
+	var (
+		commands []string
+		plain    bool
+	)
 
 	fs := ff.NewFlagSet("plugin").SetParent(rootFlags)
 	fs.StringListVar(&commands, 0, "command", "register a command as NAME or NAME:SHORT_HELP (repeatable)")
+	fs.BoolVar(&plain, 0, "plain", "send message text as-is rather than parsing it as markdown")
 
 	return &ff.Command{
 		Name:      "plugin",
@@ -43,7 +47,7 @@ commands.`),
 			}
 			defer client.Close()
 
-			p := &plugin.Plugin{Client: client.Inner, JSON: rootConfig.JSON}
+			p := &plugin.Plugin{Client: client.Inner, JSON: rootConfig.JSON, Plain: plain}
 
 			switch {
 			case len(args) == 0:

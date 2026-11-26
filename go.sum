@@ -18,6 +18,8 @@ github.com/peterbourgon/ff/v4 v4.0.0-beta.1 h1:hV8qRu3V7YfiSMsBSfPfdcznAvPQd3jI5
 github.com/peterbourgon/ff/v4 v4.0.0-beta.1/go.mod h1:onQJUKipvCyFmZ1rIYwFAh1BhPOvftb1uhvSI7krNLc=
 github.com/seabird-chat/seabird-go v0.6.1 h1:lozrMeQK8rmZCodeI+GsWTiRC/SWYaaMlHKdI8oLQVk=
 github.com/seabird-chat/seabird-go v0.6.1/go.mod h1:KQT3mMkfVMlbwdAJSK/zYsni+S8AiAH7oAbvHDcAYrk=
+github.com/yuin/goldmark v1.8.7 h1:XT/tNqCIbabh0ln675w4x3dv04kQBKi8NwYqi9IJaxI=
+github.com/yuin/goldmark v1.8.7/go.mod h1:ip/1k0VRfGynBgxOz0yCqHrbZXhcjxyuS66Brc7iBKg=
 golang.org/x/net v0.60.0 h1:79p50tfZlm0J9YfoDsSi639qSXNGVwEzOPLCxM2FsYU=
 golang.org/x/net v0.60.0/go.mod h1:2DA/G1UfVbCpQPeWTmMPGY7Cs2PkBkwu743bVX5PIVg=
 golang.org/x/sys v0.50.0 h1:dkKZEFTEKaLr1sjhs0WiKqoi8Jj5nHbS3Njmx1UoMJs=
