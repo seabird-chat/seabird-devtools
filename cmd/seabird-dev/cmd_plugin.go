@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/peterbourgon/ff/v4"
-	seabird "github.com/seabird-chat/seabird-go"
 	"github.com/seabird-chat/seabird-go/pb"
 	"golang.org/x/term"
 
@@ -20,52 +19,76 @@ func newPluginCommand(rootFlags *ff.FlagSet, rootConfig *rootConfig) *ff.Command
 	var (
 		commands []string
 		plain    bool
+		count    int
 	)
 
 	fs := ff.NewFlagSet("plugin").SetParent(rootFlags)
 	fs.StringListVar(&commands, 0, "command", "register a command as NAME or NAME:SHORT_HELP (repeatable)")
 	fs.BoolVar(&plain, 0, "plain", "send message text as-is rather than parsing it as markdown")
 
+	watchFlags := ff.NewFlagSet("watch").SetParent(fs)
+	watchFlags.IntVar(&count, 0, "count", 0, "exit after this many events (0 for no limit)")
+
+	// connect returns a plugin connected to core, and a function to close it.
+	connect := func() (*plugin.Plugin, map[string]*pb.CommandMetadata, func(), error) {
+		metadata, err := parseCommandFlags(commands)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		conn, err := dial(rootConfig.Host, rootConfig.Token)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		p := &plugin.Plugin{
+			Client: pb.NewSeabirdClient(conn),
+			JSON:   rootConfig.JSON,
+			Plain:  plain,
+			Color:  useColor(),
+		}
+		return p, metadata, func() { conn.Close() }, nil
+	}
+
 	return &ff.Command{
 		Name:      "plugin",
-		Usage:     "seabird-dev plugin [FLAGS] [watch | <COMMAND> [ARGS...]]",
+		Usage:     "seabird-dev plugin [FLAGS] [<COMMAND> [ARGS...]]",
 		ShortHelp: "act as a plugin which can call every core RPC",
 		LongHelp: strings.TrimSpace(`
-With no arguments, start a prompt which prints events as they arrive. With
-"watch", print events until interrupted. Otherwise, run a single command, such
-as "seabird-dev plugin backends". Run "seabird-dev plugin help" to list
-commands.`),
+With no arguments, start a prompt which prints events as they arrive.
+Otherwise, run a single command, such as "seabird-dev plugin backends". Run
+"seabird-dev plugin help" to list commands.`),
 		Flags: fs,
+		Subcommands: []*ff.Command{{
+			Name:      "watch",
+			Usage:     "seabird-dev plugin watch [FLAGS]",
+			ShortHelp: "print events until interrupted, or until --count have arrived",
+			Flags:     watchFlags,
+			Exec: func(ctx context.Context, args []string) error {
+				p, metadata, closeConn, err := connect()
+				if err != nil {
+					return err
+				}
+				defer closeConn()
+
+				return p.Watch(ctx, os.Stdout, metadata, count)
+			},
+		}},
 		Exec: func(ctx context.Context, args []string) error {
-			metadata, err := parseCommandFlags(commands)
+			p, metadata, closeConn, err := connect()
 			if err != nil {
 				return err
 			}
+			defer closeConn()
 
-			client, err := seabird.NewClient(rootConfig.Host, rootConfig.Token)
-			if err != nil {
-				return fmt.Errorf("connect to %s: %w", rootConfig.Host, err)
-			}
-			defer client.Close()
-
-			p := &plugin.Plugin{
-				Client: client.Inner,
-				JSON:   rootConfig.JSON,
-				Plain:  plain,
-				Color:  useColor(),
-			}
-
-			switch {
-			case len(args) == 0:
-				shell := repl.ShellConfig{Prompt: "plugin> ", HistoryFile: historyFile("plugin")}
-				return runShell(ctx, shell, p.Commands(),
-					func(ctx context.Context, w io.Writer) error { return p.Watch(ctx, w, metadata) },
-					nil)
-			case len(args) == 1 && args[0] == "watch":
-				return p.Watch(ctx, os.Stdout, metadata)
-			default:
+			if len(args) > 0 {
 				return p.Commands().Dispatch(ctx, os.Stdout, strings.Join(args, " "))
 			}
+
+			shell := repl.ShellConfig{Prompt: "plugin> ", HistoryFile: historyFile("plugin")}
+			return runShell(ctx, shell, p.Commands(),
+				func(ctx context.Context, w io.Writer) error { return p.Watch(ctx, w, metadata, 0) },
+				nil)
 		},
 	}
 }

@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/peterbourgon/ff/v4"
-	seabird "github.com/seabird-chat/seabird-go"
 
 	"github.com/seabird-chat/seabird-devtools/internal/backend"
 	"github.com/seabird-chat/seabird-devtools/internal/repl"
+	"github.com/seabird-chat/seabird-go/pb"
 )
 
 func newBackendCommand(rootFlags *ff.FlagSet, rootConfig *rootConfig) *ff.Command {
@@ -37,16 +37,16 @@ answers core's requests. Run "help" at the prompt to list commands.`),
 				return fmt.Errorf("unexpected arguments: %s", strings.Join(args, " "))
 			}
 
-			client, err := seabird.NewChatIngestClient(rootConfig.Host, rootConfig.Token)
+			conn, err := dial(rootConfig.Host, rootConfig.Token)
 			if err != nil {
-				return fmt.Errorf("connect to %s: %w", rootConfig.Host, err)
+				return err
 			}
-			defer client.Close()
+			defer conn.Close()
 
 			b.JSON = rootConfig.JSON
 			b.Color = useColor()
 
-			if err := b.Connect(ctx, client.Inner); err != nil {
+			if err := b.Connect(ctx, pb.NewChatIngestClient(conn)); err != nil {
 				return err
 			}
 			defer b.Close()

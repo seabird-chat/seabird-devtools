@@ -33,15 +33,20 @@ type Plugin struct {
 	Color bool
 }
 
-// Watch streams events to w until ctx is done or the stream fails. Commands
-// are registered with core so that matching command events are delivered.
-func (p *Plugin) Watch(ctx context.Context, w io.Writer, commands map[string]*pb.CommandMetadata) error {
+// Watch streams events to w until ctx is done, the stream fails, or limit
+// events have arrived when limit is positive. Commands are registered with
+// core so that matching command events are delivered.
+func (p *Plugin) Watch(ctx context.Context, w io.Writer, commands map[string]*pb.CommandMetadata, limit int) error {
+	// Canceling closes the stream when returning early.
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	stream, err := p.Client.StreamEvents(ctx, &pb.StreamEventsRequest{Commands: commands})
 	if err != nil {
 		return fmt.Errorf("stream events: %w", err)
 	}
 
-	for {
+	for seen := 0; limit <= 0 || seen < limit; seen++ {
 		event, err := stream.Recv()
 		if err != nil {
 			if ctx.Err() != nil {
@@ -52,6 +57,7 @@ func (p *Plugin) Watch(ctx context.Context, w io.Writer, commands map[string]*pb
 
 		p.print(w, event, format.Event(event, p.Color))
 	}
+	return nil
 }
 
 // Commands returns a REPL command for each RPC.

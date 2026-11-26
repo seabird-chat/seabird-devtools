@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"net"
+	"strings"
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
@@ -153,7 +154,20 @@ func TestWatch(t *testing.T) {
 
 	// The fake stream ends after its events, which Watch reports as an error.
 	var buf bytes.Buffer
-	err := p.Watch(t.Context(), &buf, nil)
+	err := p.Watch(t.Context(), &buf, nil, 0)
 	assert.Error(t, err)
 	assert.Equal(t, "message sbc_a x(sbu_x): hi\n", buf.String())
+}
+
+func TestWatchLimit(t *testing.T) {
+	message := &pb.Event{Inner: &pb.Event_Message{Message: &pb.MessageEvent{
+		Source: &pb.ChannelSource{ChannelId: "sbc_a", User: &pb.User{Id: "sbu_x", DisplayName: "x"}},
+		Text:   "hi",
+	}}}
+	core := &fakeCore{events: []*pb.Event{message, message, message}}
+	p := newTestPlugin(t, core)
+
+	var buf bytes.Buffer
+	assert.NoError(t, p.Watch(t.Context(), &buf, nil, 2))
+	assert.Equal(t, 2, strings.Count(buf.String(), "\n"))
 }

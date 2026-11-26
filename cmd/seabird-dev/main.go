@@ -8,15 +8,17 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
 
 	"github.com/peterbourgon/ff/v4"
 	"github.com/peterbourgon/ff/v4/ffhelp"
 )
 
 type rootConfig struct {
-	Host  string
-	Token string
-	JSON  bool
+	Host    string
+	Token   string
+	JSON    bool
+	Timeout time.Duration
 }
 
 func main() {
@@ -24,8 +26,12 @@ func main() {
 	defer stop()
 
 	// Flags can also be set from the environment, e.g. SEABIRD_TOKEN.
-	rootCmd := newRootCommand()
-	err := rootCmd.ParseAndRun(ctx, os.Args[1:], ff.WithEnvVarPrefix("SEABIRD"))
+	rootConfig := &rootConfig{}
+	rootCmd := newRootCommand(rootConfig)
+	err := rootCmd.Parse(os.Args[1:], ff.WithEnvVarPrefix("SEABIRD"))
+	if err == nil {
+		err = run(ctx, rootCmd, rootConfig.Timeout)
+	}
 	if err == nil {
 		return
 	}
@@ -48,14 +54,31 @@ func main() {
 	os.Exit(1)
 }
 
-func newRootCommand() *ff.Command {
-	rootConfig := &rootConfig{}
+// run runs the parsed command, stopping it after timeout if it's set. Running
+// out of time is an error, even for commands which otherwise run until
+// interrupted.
+func run(ctx context.Context, cmd *ff.Command, timeout time.Duration) error {
+	if timeout <= 0 {
+		return cmd.Run(ctx)
+	}
 
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	err := cmd.Run(ctx)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Errorf("timed out after %s", timeout)
+	}
+	return err
+}
+
+func newRootCommand(rootConfig *rootConfig) *ff.Command {
 	fs := ff.NewFlagSet("seabird-dev")
 
 	fs.StringVar(&rootConfig.Host, 0, "host", "http://127.0.0.1:11235", "seabird-core URL")
 	fs.StringVar(&rootConfig.Token, 0, "token", "", "seabird-core auth token")
 	fs.BoolVar(&rootConfig.JSON, 0, "json", "print responses and events as JSON")
+	fs.DurationVar(&rootConfig.Timeout, 0, "timeout", 0, "exit with an error if still running after this long (0 for no limit)")
 
 	return &ff.Command{
 		Name:  "seabird-dev",

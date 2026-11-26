@@ -37,6 +37,9 @@ Every flag can also be set with a `SEABIRD_` environment variable:
 - `SEABIRD_TOKEN` (required) - an auth token from `seabird-core token create`.
 - `SEABIRD_JSON` (optional) - set to `true` to print responses and events as
   protojson instead of text.
+- `SEABIRD_TIMEOUT` (optional) - a duration such as `30s`. If the command is
+  still running after it, it exits with an error. This bounds scripted runs,
+  including `watch` and prompts.
 
 ## Plugin
 
@@ -57,7 +60,8 @@ Other ways to run it:
 
 - `seabird-dev plugin <command> [args...]` runs one command and exits, such as
   `seabird-dev plugin channels irc.libera`.
-- `seabird-dev plugin watch` prints events until interrupted.
+- `seabird-dev plugin watch` prints events until interrupted. With
+  `--count N`, it exits after N events.
 - Piping commands into `seabird-dev plugin` runs them in order.
 
 Core only delivers command events to plugins which register the command. Pass
