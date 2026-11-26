@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/alecthomas/assert/v2"
+	seabird "github.com/seabird-chat/seabird-go"
 	"github.com/seabird-chat/seabird-go/pb"
 )
 
@@ -17,6 +18,7 @@ func TestEvent(t *testing.T) {
 	tests := []struct {
 		name  string
 		event *pb.Event
+		color bool
 		want  string
 	}{
 		{
@@ -53,6 +55,22 @@ func TestEvent(t *testing.T) {
 			want:  "perform_private_action sbu_alice from p: waves",
 		},
 		{
+			name: "message with color",
+			event: &pb.Event{Inner: &pb.Event_Message{Message: &pb.MessageEvent{
+				Source:    source,
+				Text:      "hi",
+				RootBlock: seabird.NewBoldBlock(seabird.NewTextBlock("hi")),
+			}}},
+			color: true,
+			want:  "message sbc_chan alice(sbu_alice): \x1b[0;1mhi\x1b[0m",
+		},
+		{
+			name:  "color without blocks",
+			event: &pb.Event{Inner: &pb.Event_Message{Message: &pb.MessageEvent{Source: source, Text: "hi"}}},
+			color: true,
+			want:  "message sbc_chan alice(sbu_alice): hi",
+		},
+		{
 			name:  "unknown",
 			event: &pb.Event{},
 			want:  "unknown event {}",
@@ -61,7 +79,7 @@ func TestEvent(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, Event(tt.event))
+			assert.Equal(t, tt.want, Event(tt.event, tt.color))
 		})
 	}
 }

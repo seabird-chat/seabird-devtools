@@ -90,3 +90,8 @@ markdown and send it as message blocks. Pass `--plain` to send text as-is.
 A prompt line can't contain a newline, so a literal `\n` is treated as one,
 for example `send irc://libera/%23chan - one\n- two`. Markdown without a
 matching block, such as images, is rejected.
+
+When stdout is a terminal, incoming messages are shown with their formatting,
+using terminal styles and colors much like an IRC client. Spoilers are shown in
+reverse video and timestamps in local time. Set `NO_COLOR` to turn this off.
+Otherwise, and with `--json`, messages are shown as plain text.

@@ -29,6 +29,9 @@ type Plugin struct {
 
 	// Plain sends message text as-is rather than parsing it as markdown.
 	Plain bool
+
+	// Color renders formatting in events with terminal escape codes.
+	Color bool
 }
 
 // message converts message text into a block. A literal \n is a newline,
@@ -63,7 +66,7 @@ func (p *Plugin) Watch(ctx context.Context, w io.Writer, commands map[string]*pb
 			return fmt.Errorf("stream events: %w", err)
 		}
 
-		p.print(w, event, format.Event(event))
+		p.print(w, event, format.Event(event, p.Color))
 	}
 }
 

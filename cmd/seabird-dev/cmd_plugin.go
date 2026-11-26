@@ -10,6 +10,7 @@ import (
 	"github.com/peterbourgon/ff/v4"
 	seabird "github.com/seabird-chat/seabird-go"
 	"github.com/seabird-chat/seabird-go/pb"
+	"golang.org/x/term"
 
 	"github.com/seabird-chat/seabird-devtools/internal/plugin"
 	"github.com/seabird-chat/seabird-devtools/internal/repl"
@@ -47,7 +48,12 @@ commands.`),
 			}
 			defer client.Close()
 
-			p := &plugin.Plugin{Client: client.Inner, JSON: rootConfig.JSON, Plain: plain}
+			p := &plugin.Plugin{
+				Client: client.Inner,
+				JSON:   rootConfig.JSON,
+				Plain:  plain,
+				Color:  useColor(),
+			}
 
 			switch {
 			case len(args) == 0:
@@ -95,4 +101,9 @@ func parseCommandFlags(values []string) (map[string]*pb.CommandMetadata, error) 
 		metadata[name] = &pb.CommandMetadata{Name: name, ShortHelp: help}
 	}
 	return metadata, nil
+}
+
+// useColor reports whether stdout is a terminal and NO_COLOR is unset.
+func useColor() bool {
+	return os.Getenv("NO_COLOR") == "" && term.IsTerminal(int(os.Stdout.Fd()))
 }

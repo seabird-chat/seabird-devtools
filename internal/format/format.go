@@ -21,45 +21,61 @@ func JSON(msg proto.Message) string {
 	return string(b)
 }
 
-// Event renders an event from seabird-core's event stream.
-func Event(e *pb.Event) string {
+// Event renders an event from seabird-core's event stream. With color, message
+// blocks are rendered with terminal formatting rather than as plain text.
+func Event(e *pb.Event, color bool) string {
+	body := func(m message) string { return messageBody(m, color) }
+
 	var s string
 	switch inner := e.GetInner().(type) {
 	case *pb.Event_Message:
 		m := inner.Message
-		s = fmt.Sprintf("message %s %s: %s", m.GetSource().GetChannelId(), User(m.GetSource().GetUser()), m.GetText())
+		s = fmt.Sprintf("message %s %s: %s", m.GetSource().GetChannelId(), User(m.GetSource().GetUser()), body(m))
 	case *pb.Event_PrivateMessage:
 		m := inner.PrivateMessage
-		s = fmt.Sprintf("private_message %s: %s", User(m.GetSource()), m.GetText())
+		s = fmt.Sprintf("private_message %s: %s", User(m.GetSource()), body(m))
 	case *pb.Event_Mention:
 		m := inner.Mention
-		s = fmt.Sprintf("mention %s %s: %s", m.GetSource().GetChannelId(), User(m.GetSource().GetUser()), m.GetText())
+		s = fmt.Sprintf("mention %s %s: %s", m.GetSource().GetChannelId(), User(m.GetSource().GetUser()), body(m))
 	case *pb.Event_Command:
 		m := inner.Command
 		s = fmt.Sprintf("command %s %s: %s %s", m.GetSource().GetChannelId(), User(m.GetSource().GetUser()), m.GetCommand(), m.GetArg())
 	case *pb.Event_Action:
 		m := inner.Action
-		s = fmt.Sprintf("action %s %s: %s", m.GetSource().GetChannelId(), User(m.GetSource().GetUser()), m.GetText())
+		s = fmt.Sprintf("action %s %s: %s", m.GetSource().GetChannelId(), User(m.GetSource().GetUser()), body(m))
 	case *pb.Event_PrivateAction:
 		m := inner.PrivateAction
-		s = fmt.Sprintf("private_action %s: %s", User(m.GetSource()), m.GetText())
+		s = fmt.Sprintf("private_action %s: %s", User(m.GetSource()), body(m))
 	case *pb.Event_SendMessage:
 		m := inner.SendMessage
-		s = fmt.Sprintf("send_message %s from %s: %s", m.GetChannelId(), m.GetSender(), m.GetText())
+		s = fmt.Sprintf("send_message %s from %s: %s", m.GetChannelId(), m.GetSender(), body(m))
 	case *pb.Event_SendPrivateMessage:
 		m := inner.SendPrivateMessage
-		s = fmt.Sprintf("send_private_message %s from %s: %s", m.GetUserId(), m.GetSender(), m.GetText())
+		s = fmt.Sprintf("send_private_message %s from %s: %s", m.GetUserId(), m.GetSender(), body(m))
 	case *pb.Event_PerformAction:
 		m := inner.PerformAction
-		s = fmt.Sprintf("perform_action %s from %s: %s", m.GetChannelId(), m.GetSender(), m.GetText())
+		s = fmt.Sprintf("perform_action %s from %s: %s", m.GetChannelId(), m.GetSender(), body(m))
 	case *pb.Event_PerformPrivateAction:
 		m := inner.PerformPrivateAction
-		s = fmt.Sprintf("perform_private_action %s from %s: %s", m.GetUserId(), m.GetSender(), m.GetText())
+		s = fmt.Sprintf("perform_private_action %s from %s: %s", m.GetUserId(), m.GetSender(), body(m))
 	default:
 		s = "unknown event " + JSON(e)
 	}
 
 	return strings.TrimRight(s, " ") + Tags(e.GetTags())
+}
+
+// message is implemented by every event type which carries message text.
+type message interface {
+	GetText() string
+	GetRootBlock() *pb.Block
+}
+
+func messageBody(m message, color bool) string {
+	if color && m.GetRootBlock() != nil {
+		return ANSI(m.GetRootBlock())
+	}
+	return m.GetText()
 }
 
 // User renders a user as its display name followed by its ID.
