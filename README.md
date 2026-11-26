@@ -14,6 +14,14 @@ just run --help
 `just test` runs the tests, `just check` adds vet and the race detector, and
 `just fmt` formats everything.
 
+The tests in `internal/integration` run the backend and plugin against a real
+seabird-core, and are skipped unless one is available, either from
+`SEABIRD_CORE_BIN` or as `seabird-core` on `PATH`:
+
+```sh
+SEABIRD_CORE_BIN=../seabird-core/tmp/seabird-core just test
+```
+
 ## Using it from another repo
 
 Add this repo as a flake input and include the package in the devshell:

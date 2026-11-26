@@ -78,6 +78,8 @@ func newTestPlugin(t *testing.T, core *fakeCore) *Plugin {
 }
 
 func TestCommands(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		plain    bool
@@ -129,6 +131,8 @@ func TestCommands(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			core := &fakeCore{}
 			p := newTestPlugin(t, core)
 			p.Plain = tt.plain
@@ -144,6 +148,8 @@ func TestCommands(t *testing.T) {
 }
 
 func TestWatch(t *testing.T) {
+	t.Parallel()
+
 	core := &fakeCore{events: []*pb.Event{{
 		Inner: &pb.Event_Message{Message: &pb.MessageEvent{
 			Source: &pb.ChannelSource{ChannelId: "sbc_a", User: &pb.User{Id: "sbu_x", DisplayName: "x"}},
@@ -160,6 +166,8 @@ func TestWatch(t *testing.T) {
 }
 
 func TestWatchLimit(t *testing.T) {
+	t.Parallel()
+
 	message := &pb.Event{Inner: &pb.Event_Message{Message: &pb.MessageEvent{
 		Source: &pb.ChannelSource{ChannelId: "sbc_a", User: &pb.User{Id: "sbu_x", DisplayName: "x"}},
 		Text:   "hi",

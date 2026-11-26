@@ -142,6 +142,8 @@ func assertEvent(t *testing.T, want, got *pb.ChatEvent) {
 }
 
 func TestCommands(t *testing.T) {
+	t.Parallel()
+
 	b, core, _ := newTestBackend(t)
 	ctx := t.Context()
 	var out bytes.Buffer
@@ -191,6 +193,8 @@ func TestCommands(t *testing.T) {
 }
 
 func TestRequests(t *testing.T) {
+	t.Parallel()
+
 	success := func(id string) *pb.ChatEvent {
 		return &pb.ChatEvent{Id: id, Inner: &pb.ChatEvent_Success{Success: &pb.SuccessChatEvent{}}}
 	}
@@ -224,6 +228,8 @@ func TestRequests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			_, core, _ := newTestBackend(t)
 			core.requests <- tt.req
 			assertEvent(t, tt.want, core.next(t))
@@ -232,6 +238,8 @@ func TestRequests(t *testing.T) {
 }
 
 func TestRequestOutput(t *testing.T) {
+	t.Parallel()
+
 	_, core, out := newTestBackend(t)
 	core.requests <- &pb.ChatRequest{Id: "1", Inner: &pb.ChatRequest_SendMessage{SendMessage: &pb.SendMessageChatRequest{ChannelId: "#general", Text: "hi"}}}
 	core.next(t)
@@ -239,9 +247,13 @@ func TestRequestOutput(t *testing.T) {
 }
 
 func TestModes(t *testing.T) {
+	t.Parallel()
+
 	req := &pb.ChatRequest{Id: "1", Inner: &pb.ChatRequest_SendMessage{SendMessage: &pb.SendMessageChatRequest{ChannelId: "#general", Text: "hi"}}}
 
 	t.Run("fail", func(t *testing.T) {
+		t.Parallel()
+
 		b, core, _ := newTestBackend(t)
 		assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond fail rate limited"))
 		core.requests <- req
@@ -249,6 +261,8 @@ func TestModes(t *testing.T) {
 	})
 
 	t.Run("ignore", func(t *testing.T) {
+		t.Parallel()
+
 		b, core, _ := newTestBackend(t)
 		b.SetMode(ModeIgnore, "", 0)
 		core.requests <- req
@@ -260,6 +274,8 @@ func TestModes(t *testing.T) {
 	})
 
 	t.Run("delay", func(t *testing.T) {
+		t.Parallel()
+
 		b, core, _ := newTestBackend(t)
 		assert.NoError(t, b.Commands().Dispatch(t.Context(), io.Discard, "respond delay 200ms"))
 		start := time.Now()
@@ -270,6 +286,8 @@ func TestModes(t *testing.T) {
 }
 
 func TestCloseSend(t *testing.T) {
+	t.Parallel()
+
 	core := newFakeCore()
 	b := &Backend{Type: "dev", ID: "local"}
 	assert.NoError(t, b.Connect(t.Context(), dial(t, core)))

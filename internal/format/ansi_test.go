@@ -19,9 +19,8 @@ func readable(s string) string {
 }
 
 func TestANSI(t *testing.T) {
-	local := time.Local
-	time.Local = time.UTC
-	t.Cleanup(func() { time.Local = local })
+	// Timestamps render in local time, which depends on the machine.
+	stamp := time.Unix(1700000000, 0).Local().Format("2006-01-02 15:04:05 MST")
 
 	tests := []struct {
 		in   string
@@ -34,7 +33,7 @@ func TestANSI(t *testing.T) {
 		{in: "run `ls -l`", want: "run {0;36}ls -l{0}"},
 		{in: "[site](https://x.y)", want: "{0;4;34}site{0} (https://x.y)"},
 		{in: "https://x.y", want: "{0;4;34}https://x.y{0}"},
-		{in: "at <t:1700000000>", want: "at {0;33}2023-11-14 22:13:20 UTC{0}"},
+		{in: "at <t:1700000000>", want: "at {0;33}" + stamp + "{0}"},
 		{in: "## title", want: "{0;1}## title{0}"},
 		{in: "intro\n- a\n- **b**\n\nafter", want: "intro\n• a\n• {0;1}b{0}\nafter"},
 		{in: "- a\n  - nested", want: "• a\n  • nested"},

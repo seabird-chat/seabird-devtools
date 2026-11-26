@@ -12,11 +12,11 @@ clean:
 
 # Run all tests (e.g. just test -run TestFormatEvent)
 test *args="":
-    CGO_ENABLED=0 go test ./... {{ args }}
+    CGO_ENABLED=0 go test -timeout 60s ./... {{ args }}
 
 # Run all tests with the race detector, which needs cgo
 test-race *args="":
-    go test -race ./... {{ args }}
+    go test -race -timeout 60s ./... {{ args }}
 
 # Run go vet
 vet:

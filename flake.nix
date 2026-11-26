@@ -35,6 +35,7 @@
               src = ./.;
               vendorHash = "sha256-baVa5B/ym9jAnc5C3DywwjnHwqPfFQXKQ3CNtJ7C7OU=";
               subPackages = [ "cmd/seabird-dev" ];
+              checkFlags = [ "-timeout=60s" ];
 
               ldflags = [
                 "-s"
