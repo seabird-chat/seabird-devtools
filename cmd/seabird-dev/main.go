@@ -62,6 +62,7 @@ func newRootCommand() *ff.Command {
 		Usage: "seabird-dev [FLAGS] <SUBCOMMAND> ...",
 		Flags: fs,
 		Subcommands: []*ff.Command{
+			newBackendCommand(fs, rootConfig),
 			newPluginCommand(fs, rootConfig),
 			newVersionCommand(),
 		},

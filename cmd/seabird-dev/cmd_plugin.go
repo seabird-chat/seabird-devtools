@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -13,7 +13,6 @@ import (
 	"golang.org/x/term"
 
 	"github.com/seabird-chat/seabird-devtools/internal/plugin"
-	"github.com/seabird-chat/seabird-devtools/internal/repl"
 )
 
 func newPluginCommand(rootFlags *ff.FlagSet, rootConfig *rootConfig) *ff.Command {
@@ -57,7 +56,9 @@ commands.`),
 
 			switch {
 			case len(args) == 0:
-				return runPluginShell(ctx, p, metadata)
+				return runShell(ctx, "plugin> ", historyFile("plugin"), p.Commands(),
+					func(ctx context.Context, w io.Writer) error { return p.Watch(ctx, w, metadata) },
+					nil)
 			case len(args) == 1 && args[0] == "watch":
 				return p.Watch(ctx, os.Stdout, metadata)
 			default:
@@ -65,29 +66,6 @@ commands.`),
 			}
 		},
 	}
-}
-
-// runPluginShell runs the prompt while printing events above it. Whichever
-// finishes first stops the other.
-func runPluginShell(ctx context.Context, p *plugin.Plugin, metadata map[string]*pb.CommandMetadata) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	shell, err := repl.NewShell("plugin> ", historyFile("plugin"), p.Commands())
-	if err != nil {
-		return err
-	}
-	defer shell.Close()
-
-	watchErr := make(chan error, 1)
-	go func() {
-		watchErr <- p.Watch(ctx, shell.Stdout(), metadata)
-		cancel()
-	}()
-
-	err = shell.Run(ctx)
-	cancel()
-	return errors.Join(err, <-watchErr)
 }
 
 // parseCommandFlags turns NAME[:SHORT_HELP] values into command metadata.

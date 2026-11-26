@@ -83,3 +83,47 @@ func TestEvent(t *testing.T) {
 		})
 	}
 }
+
+func TestChatRequest(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *pb.ChatRequest
+		want string
+	}{
+		{
+			name: "send message",
+			req: &pb.ChatRequest{Inner: &pb.ChatRequest_SendMessage{SendMessage: &pb.SendMessageChatRequest{
+				ChannelId: "#general",
+				Text:      "hi",
+				Tags:      map[string]string{"a": "b"},
+			}}},
+			want: "send_message #general: hi [a=b]",
+		},
+		{
+			name: "private action",
+			req:  &pb.ChatRequest{Inner: &pb.ChatRequest_PerformPrivateAction{PerformPrivateAction: &pb.PerformPrivateActionChatRequest{UserId: "alice", Text: "waves"}}},
+			want: "perform_private_action alice: waves",
+		},
+		{
+			name: "join",
+			req:  &pb.ChatRequest{Inner: &pb.ChatRequest_JoinChannel{JoinChannel: &pb.JoinChannelChatRequest{ChannelName: "#new"}}},
+			want: "join_channel #new",
+		},
+		{
+			name: "update channel info",
+			req:  &pb.ChatRequest{Inner: &pb.ChatRequest_UpdateChannelInfo{UpdateChannelInfo: &pb.UpdateChannelInfoChatRequest{ChannelId: "#general", Topic: "news"}}},
+			want: `update_channel_info #general topic="news"`,
+		},
+		{
+			name: "metadata",
+			req:  &pb.ChatRequest{Inner: &pb.ChatRequest_Metadata{Metadata: &pb.MetadataChatRequest{}}},
+			want: "metadata",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, ChatRequest(tt.req, false))
+		})
+	}
+}

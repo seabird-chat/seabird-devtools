@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	seabird "github.com/seabird-chat/seabird-go"
 	"github.com/seabird-chat/seabird-go/pb"
 	"google.golang.org/protobuf/proto"
 
@@ -32,21 +31,6 @@ type Plugin struct {
 
 	// Color renders formatting in events with terminal escape codes.
 	Color bool
-}
-
-// message converts message text into a block. A literal \n is a newline,
-// since prompt input can't contain one.
-func (p *Plugin) message(text string) (*pb.Block, error) {
-	text = strings.ReplaceAll(text, `\n`, "\n")
-	if p.Plain {
-		return seabird.NewTextBlock(text), nil
-	}
-
-	block, err := markdown.Parse(text)
-	if err != nil {
-		return nil, fmt.Errorf("parse markdown: %w", err)
-	}
-	return block, nil
 }
 
 // Watch streams events to w until ctx is done or the stream fails. Commands
@@ -78,7 +62,7 @@ func (p *Plugin) Commands() repl.Commands {
 			Args: []string{"<channel>", "<text...>"},
 			Help: "send a message to a channel",
 			Run: func(ctx context.Context, w io.Writer, args []string) error {
-				block, err := p.message(args[1])
+				block, err := markdown.Input(args[1], p.Plain)
 				if err != nil {
 					return err
 				}
@@ -95,7 +79,7 @@ func (p *Plugin) Commands() repl.Commands {
 			Args: []string{"<user>", "<text...>"},
 			Help: "send a private message to a user",
 			Run: func(ctx context.Context, w io.Writer, args []string) error {
-				block, err := p.message(args[1])
+				block, err := markdown.Input(args[1], p.Plain)
 				if err != nil {
 					return err
 				}
@@ -112,7 +96,7 @@ func (p *Plugin) Commands() repl.Commands {
 			Args: []string{"<channel>", "<text...>"},
 			Help: "perform an action (/me) in a channel",
 			Run: func(ctx context.Context, w io.Writer, args []string) error {
-				block, err := p.message(args[1])
+				block, err := markdown.Input(args[1], p.Plain)
 				if err != nil {
 					return err
 				}
@@ -129,7 +113,7 @@ func (p *Plugin) Commands() repl.Commands {
 			Args: []string{"<user>", "<text...>"},
 			Help: "perform an action (/me) in a private message",
 			Run: func(ctx context.Context, w io.Writer, args []string) error {
-				block, err := p.message(args[1])
+				block, err := markdown.Input(args[1], p.Plain)
 				if err != nil {
 					return err
 				}

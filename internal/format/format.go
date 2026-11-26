@@ -118,3 +118,37 @@ func Command(c *pb.CommandMetadata) string {
 	}
 	return s
 }
+
+// ChatRequest renders a request from seabird-core to a chat backend. With
+// color, message blocks are rendered with terminal formatting.
+func ChatRequest(r *pb.ChatRequest, color bool) string {
+	var s string
+	switch inner := r.GetInner().(type) {
+	case *pb.ChatRequest_SendMessage:
+		m := inner.SendMessage
+		s = fmt.Sprintf("send_message %s: %s", m.GetChannelId(), messageBody(m, color)) + Tags(m.GetTags())
+	case *pb.ChatRequest_SendPrivateMessage:
+		m := inner.SendPrivateMessage
+		s = fmt.Sprintf("send_private_message %s: %s", m.GetUserId(), messageBody(m, color)) + Tags(m.GetTags())
+	case *pb.ChatRequest_PerformAction:
+		m := inner.PerformAction
+		s = fmt.Sprintf("perform_action %s: %s", m.GetChannelId(), messageBody(m, color)) + Tags(m.GetTags())
+	case *pb.ChatRequest_PerformPrivateAction:
+		m := inner.PerformPrivateAction
+		s = fmt.Sprintf("perform_private_action %s: %s", m.GetUserId(), messageBody(m, color)) + Tags(m.GetTags())
+	case *pb.ChatRequest_JoinChannel:
+		m := inner.JoinChannel
+		s = "join_channel " + m.GetChannelName() + Tags(m.GetTags())
+	case *pb.ChatRequest_LeaveChannel:
+		m := inner.LeaveChannel
+		s = "leave_channel " + m.GetChannelId() + Tags(m.GetTags())
+	case *pb.ChatRequest_UpdateChannelInfo:
+		m := inner.UpdateChannelInfo
+		s = fmt.Sprintf("update_channel_info %s topic=%q", m.GetChannelId(), m.GetTopic()) + Tags(m.GetTags())
+	case *pb.ChatRequest_Metadata:
+		s = "metadata"
+	default:
+		s = "unknown request " + JSON(r)
+	}
+	return s
+}

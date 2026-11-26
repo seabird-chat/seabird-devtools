@@ -42,6 +42,22 @@ var mdParser = parser.NewParser(
 	),
 )
 
+// Input converts text typed at a prompt into a block, parsing it as markdown
+// unless plain is set. A literal \n is a newline, since a prompt line can't
+// contain one.
+func Input(text string, plain bool) (*pb.Block, error) {
+	text = strings.ReplaceAll(text, `\n`, "\n")
+	if plain {
+		return seabird.NewTextBlock(text), nil
+	}
+
+	block, err := Parse(text)
+	if err != nil {
+		return nil, fmt.Errorf("parse markdown: %w", err)
+	}
+	return block, nil
+}
+
 // Parse converts markdown into a block tree.
 func Parse(s string) (*pb.Block, error) {
 	src := []byte(s)

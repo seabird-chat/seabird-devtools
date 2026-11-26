@@ -51,9 +51,7 @@ ok
 send_message irc://libera/%23chan from devtest: hello there
 ```
 
-`help` lists every command, and there is one per core RPC. Arguments are split
-on whitespace, except the last argument of commands like `send`, which takes
-the rest of the line.
+There is a command for every core RPC.
 
 Other ways to run it:
 
@@ -65,12 +63,49 @@ Other ways to run it:
 Core only delivers command events to plugins which register the command. Pass
 `--command NAME` or `--command NAME:SHORT_HELP` once per command.
 
-Prompt history is saved in the user cache directory, under `seabird-dev/`.
+## Backend
+
+`seabird-dev backend` connects as a fake chat backend, for testing plugins and
+core without a real chat network. Its prompt sends events as fake users, and it
+prints and answers every request core sends:
+
+```text
+backend> join #general
+backend> cmd #general alice weather 98101
+send_message #general: It's sunny in 98101
+```
+
+Channel and user IDs are the names typed at the prompt, such as `#general` and
+`alice`. Core namespaces them for plugins, so with the default `--type dev` and
+`--id local`, plugins see `#general` as `dev://local/%23general`. Channels must
+be joined before sending to them, either with `join` or with `--join #general`
+(repeatable) at startup.
+
+Requests are answered the way a working backend would: joins, leaves and topic
+changes update the channel list, and everything else succeeds. `respond`
+changes that, to test how plugins and core handle a misbehaving backend:
+
+- `respond fail [reason]` fails every request.
+- `respond ignore` never answers, so requests time out in core.
+- `respond delay 5s` answers normally after a delay.
+- `respond ok` goes back to normal.
+
+Piping commands into `seabird-dev backend` runs them in order, then disconnects
+once core has received everything.
+
+## Prompts
+
+`help` lists the commands at either prompt. Arguments are split on whitespace,
+except the last argument of commands like `send` and `msg`, which takes the
+rest of the line. History is saved in the user cache directory, under
+`seabird-dev/`.
 
 ### Formatting
 
-`send`, `pm`, `action` and `paction` parse their text as Discord-flavored
-markdown and send it as message blocks. Pass `--plain` to send text as-is.
+Commands which send messages parse their text as Discord-flavored markdown and
+send it as message blocks: `send`, `pm`, `action` and `paction` in the plugin,
+and `msg`, `action`, `mention`, `pm` and `paction` in the backend. Pass
+`--plain` to send text as-is.
 
 | Markdown                         | Block                   |
 | -------------------------------- | ----------------------- |
@@ -92,6 +127,7 @@ for example `send irc://libera/%23chan - one\n- two`. Markdown without a
 matching block, such as images, is rejected.
 
 When stdout is a terminal, incoming messages are shown with their formatting,
+in plugin events and backend requests alike,
 using terminal styles and colors much like an IRC client. Spoilers are shown in
 reverse video and timestamps in local time. Set `NO_COLOR` to turn this off.
 Otherwise, and with `--json`, messages are shown as plain text.
