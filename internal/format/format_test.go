@@ -45,9 +45,9 @@ func TestEvent(t *testing.T) {
 			name: "send message with tags",
 			event: &pb.Event{
 				Inner: &pb.Event_SendMessage{SendMessage: &pb.SendMessageEvent{Sender: "url-plugin", ChannelId: "sbc_chan", Text: "title"}},
-				Tags:  map[string]string{"proxy/skip": "1", "a": "b"},
+				Tags:  map[string]string{"seabird/link-preview": "1", "a": "b"},
 			},
-			want: "send_message sbc_chan from url-plugin: title [a=b proxy/skip=1]",
+			want: "send_message sbc_chan from url-plugin: title [a=b seabird/link-preview=1]",
 		},
 		{
 			name:  "perform private action",
